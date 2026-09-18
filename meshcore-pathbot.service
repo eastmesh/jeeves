@@ -1,0 +1,27 @@
+[Unit]
+Description=MeshCore PathBot - Path Resolver with Web Dashboard
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=meshcore
+Group=meshcore
+WorkingDirectory=/opt/meshcore-pathbot
+ExecStart=/opt/meshcore-pathbot/venv/bin/python -m meshcore_pathbot --config /etc/meshcore-pathbot/config.toml
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/meshcore-pathbot /etc/meshcore-pathbot
+ProtectHome=yes
+
+# Allow serial device access
+SupplementaryGroups=dialout
+
+[Install]
+WantedBy=multi-user.target

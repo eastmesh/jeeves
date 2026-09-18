@@ -1,0 +1,13 @@
+services:
+  pathbot:
+    build: .
+    ports:
+      - "8075:8075"
+    volumes:
+      - ./data:/app/data
+    # Uncomment the appropriate device for your connection type:
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0   # Serial
+    restart: unless-stopped
+    environment:
+      - TZ=UTC

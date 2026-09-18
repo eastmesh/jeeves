@@ -1,0 +1,239 @@
+/* MeshCore PathBot - Custom Styles */
+
+/* EastMesh-inspired theme overrides */
+:root[data-theme="dark"] {
+    --pico-background-color: #0a1215;
+    --pico-color: #d9e6de;
+    --pico-muted-color: #99b3a7;
+    --pico-muted-border-color: #233238;
+    --pico-primary: #00a86b;
+    --pico-primary-hover: #00bf78;
+    --pico-primary-focus: rgba(0, 168, 107, 0.25);
+    --pico-primary-inverse: #04110b;
+    --pico-secondary: #1b2b31;
+    --pico-secondary-hover: #243841;
+    --pico-card-background-color: #101b20;
+    --pico-card-border-color: #1f3137;
+    --pico-form-element-background-color: #0f1a1e;
+    --pico-form-element-border-color: #284148;
+}
+
+body {
+    background: radial-gradient(circle at top, #13252a 0%, #0a1215 40%, #070d10 100%);
+}
+
+nav.container-fluid,
+footer.container {
+    border-color: #1f3137;
+}
+
+a,
+[role="link"] {
+    color: #42d69f;
+}
+
+a:hover,
+[role="link"]:hover {
+    color: #64e7b6;
+}
+
+button.secondary,
+[role="button"].secondary {
+    border-color: #2d474f;
+}
+
+/* Status indicators */
+.status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.status-ok {
+    background-color: #2ecc40;
+    box-shadow: 0 0 4px #2ecc40;
+}
+
+.status-err {
+    background-color: #ff4136;
+    box-shadow: 0 0 4px #ff4136;
+}
+
+/* Message direction badges */
+.badge-in,
+.badge-out {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-in {
+    background-color: rgba(46, 204, 64, 0.2);
+    color: #2ecc40;
+}
+
+.badge-out {
+    background-color: rgba(0, 116, 217, 0.2);
+    color: #0074d9;
+}
+
+/* Path chain visualization */
+.path-chain {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 16px 0;
+    font-size: 1.1rem;
+}
+
+.hop {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.hop.resolved {
+    background-color: rgba(46, 204, 64, 0.15);
+    border: 1px solid rgba(46, 204, 64, 0.3);
+}
+
+.hop.unresolved {
+    background-color: rgba(255, 65, 54, 0.15);
+    border: 1px solid rgba(255, 65, 54, 0.3);
+    font-family: monospace;
+}
+
+.hop.ambiguous {
+    border-style: dashed;
+}
+
+.hop small {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.arrow-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.arrow {
+    font-size: 1.3rem;
+    opacity: 0.5;
+}
+
+.hop-distance {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #0074d9;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
+/* Toast notifications */
+#toast-container {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 400px;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    animation: toast-in 0.3s ease-out;
+}
+
+.toast-success {
+    background-color: rgba(46, 204, 64, 0.2);
+    border: 1px solid rgba(46, 204, 64, 0.4);
+}
+
+.toast-error {
+    background-color: rgba(255, 65, 54, 0.2);
+    border: 1px solid rgba(255, 65, 54, 0.4);
+}
+
+.toast-info {
+    background-color: rgba(0, 116, 217, 0.2);
+    border: 1px solid rgba(0, 116, 217, 0.4);
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0 4px;
+    opacity: 0.6;
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* User path search results */
+.user-path-entry {
+    padding: 8px 0;
+}
+
+.user-path-entry .path-chain {
+    padding: 8px 0;
+}
+
+/* Table tweaks */
+table td small {
+    opacity: 0.8;
+}
+
+/* Delete button sizing */
+table button {
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+/* Radio settings readonly fields */
+.radio-readonly {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Radio channels table save buttons */
+#radio-channels-table button {
+    padding: 4px 14px;
+    font-size: 0.8rem;
+    margin: 0;
+    white-space: nowrap;
+}

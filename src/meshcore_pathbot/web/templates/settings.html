@@ -1,0 +1,759 @@
+{% extends "base.html" %}
+{% block title %}Settings - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Settings</h2>
+
+<!-- ═══════════════ Radio Settings (live from device) ═══════════════ -->
+<fieldset id="radio-settings-section">
+    <legend>Radio Settings</legend>
+    <p><small>Live settings read from the connected radio. Changes are sent directly to the device.</small></p>
+
+    <div id="radio-not-connected" style="display:none;">
+        <p><small>Radio not connected. Connect to view and change radio settings.</small></p>
+    </div>
+
+    <div id="radio-settings-fields">
+        <div id="radio-loading"><p aria-busy="true">Loading radio info...</p></div>
+
+        <div id="radio-fields-inner" style="display:none;">
+            <div class="grid">
+                <label>
+                    Radio Name
+                    <input type="text" id="radio-name" placeholder="Device name">
+                </label>
+                <label>
+                    Public Key
+                    <input type="text" id="radio-pubkey" readonly class="radio-readonly">
+                </label>
+            </div>
+            <div class="grid">
+                <label>
+                    TX Power
+                    <input type="number" id="radio-tx-power" min="0" max="30">
+                </label>
+                <label>
+                    Max TX Power
+                    <input type="number" id="radio-max-tx-power" readonly class="radio-readonly">
+                </label>
+            </div>
+            <div class="grid">
+                <label>
+                    Frequency (MHz)
+                    <input type="number" id="radio-freq" step="any">
+                </label>
+                <label>
+                    Bandwidth (kHz)
+                    <input type="number" id="radio-bw" step="any">
+                </label>
+            </div>
+            <div class="grid">
+                <label>
+                    Spreading Factor
+                    <input type="number" id="radio-sf" min="5" max="12">
+                </label>
+                <label>
+                    Coding Rate
+                    <input type="number" id="radio-cr" min="5" max="8">
+                </label>
+            </div>
+            <div class="grid">
+                <label>
+                    Latitude
+                    <input type="number" id="radio-lat" step="any">
+                </label>
+                <label>
+                    Longitude
+                    <input type="number" id="radio-lon" step="any">
+                </label>
+            </div>
+            <button type="button" id="radio-save-btn" class="outline">Save Radio Settings</button>
+        </div>
+    </div>
+</fieldset>
+
+<!-- ═══════════════ Radio Channels (live from device) ═══════════════ -->
+<fieldset id="radio-channels-section">
+    <legend>Radio Channels</legend>
+    <p><small>Channel list read directly from the radio. Edit a name and click save to update the device.</small></p>
+
+    <div style="margin-bottom:0.75rem;">
+        <button type="button" id="radio-channels-refresh-btn" class="outline" style="width:auto;">
+            Pull from Radio
+        </button>
+    </div>
+
+    <div id="radio-channels-loading" style="display:none;"><p aria-busy="true">Loading channels from radio...</p></div>
+
+    <table id="radio-channels-table" role="grid" style="display:none;">
+        <thead>
+            <tr>
+                <th>Slot</th>
+                <th>Channel Name</th>
+                <th>Set Key</th>
+                <th>Active Secret (hex)</th>
+                <th>Hash</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="radio-channels-body"></tbody>
+    </table>
+    <p><small>Active Secret shows the 16-byte key currently stored on the radio. Hash is a 2-char fingerprint — use it to confirm the same key is loaded on both ends. To change the key, type the new key name in <strong>Set Key</strong> and click Save.</small></p>
+</fieldset>
+
+<hr>
+
+<form hx-post="/settings" hx-target="#toast-container" hx-swap="afterbegin" id="settings-form">
+    <fieldset>
+        <legend>Connection</legend>
+        <label>
+            Type
+            <select name="connection_type">
+                <option value="serial" {% if config.connection.type == 'serial' %}selected{% endif %}>Serial</option>
+                <option value="tcp" {% if config.connection.type == 'tcp' %}selected{% endif %}>TCP</option>
+                <option value="ble" {% if config.connection.type == 'ble' %}selected{% endif %}>BLE</option>
+            </select>
+        </label>
+        <div class="grid">
+            <label>
+                Serial Port
+                <input type="text" name="serial_port" value="{{ config.connection.serial_port or '' }}" placeholder="/dev/ttyUSB0">
+            </label>
+            <label>
+                Serial Baud
+                <input type="number" name="serial_baud" value="{{ config.connection.serial_baud }}">
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                TCP Host
+                <input type="text" name="tcp_host" value="{{ config.connection.tcp_host or '' }}" placeholder="192.168.1.100">
+            </label>
+            <label>
+                TCP Port
+                <input type="number" name="tcp_port" value="{{ config.connection.tcp_port }}">
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                TCP Health Check Interval (s)
+                <input type="number" name="tcp_health_check_interval" value="{{ config.connection.tcp_health_check_interval }}" min="0" step="1">
+            </label>
+            <label>
+                TCP Reconnect Delay (s)
+                <input type="number" name="tcp_reconnect_delay" value="{{ config.connection.tcp_reconnect_delay }}" min="1" step="1">
+            </label>
+        </div>
+        <small>TCP health checks use the companion connection to detect stale links and reconnect automatically. Set interval to 0 to disable the watchdog.</small>
+        <label>
+            BLE Address
+            <input type="text" name="ble_address" value="{{ config.connection.ble_address or '' }}" placeholder="AA:BB:CC:DD:EE:FF">
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Bot</legend>
+        <label>
+            Node Name
+            <input type="text" name="node_name" value="{{ config.bot.node_name }}" placeholder="e.g. Jeeves">
+        </label>
+        <small>Friendly name for this MeshCore node.</small>
+
+        <div class="grid">
+            <label>
+                Default Channel (legacy)
+                <input type="number" name="channel" value="{{ config.bot.channel }}" min="0" max="7">
+            </label>
+            <label>
+                Ignore List
+                <input type="text" name="ignore_list" value="{{ config.bot.ignore_list | join(', ') }}" placeholder="Comma-separated names">
+            </label>
+        </div>
+        <small>Default channel is used when no channels are configured below.</small>
+
+        <div class="grid">
+            <label>
+                Home Repeater Name
+                <input type="text" name="home_repeater_name" value="{{ config.bot.home_repeater_name }}" placeholder="e.g. VIC-HP-EDG-01">
+            </label>
+            <label>
+                Home Repeater Prefix
+                <input type="text" name="home_repeater_prefix" value="{{ config.bot.home_repeater_prefix }}" placeholder="e.g. 7a" maxlength="2" pattern="[0-9a-fA-F]{0,2}">
+            </label>
+        </div>
+        <small>If set, any matching prefix in the last 2 hops is resolved as the home repeater.</small>
+        <div class="grid">
+            <label>
+                Bot Latitude
+                <input type="number" name="bot_lat" value="{{ config.bot.lat }}" step="any" placeholder="e.g. -37.8136">
+            </label>
+            <label>
+                Bot Longitude
+                <input type="number" name="bot_lon" value="{{ config.bot.lon }}" step="any" placeholder="e.g. 144.9631">
+            </label>
+        </div>
+        <small>Bot location helps disambiguate repeaters with colliding prefixes.</small>
+    </fieldset>
+
+    <fieldset>
+        <legend>Weather Home Location</legend>
+        <p><small>Default location used when <code>weather</code> or <code>forecast</code> commands are sent without a postcode.</small></p>
+        <div class="grid">
+            <label>
+                Home Suburb Name
+                <input type="text" name="weather_home_name" value="{{ config.bot.weather_home_name }}" placeholder="e.g. Hampton Park">
+            </label>
+            <label>
+                Home Postcode
+                <input type="text" name="weather_home_postcode" value="{{ config.bot.weather_home_postcode }}" placeholder="e.g. 3976">
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                Latitude
+                <input type="number" name="weather_home_lat" value="{{ config.bot.weather_home_lat }}" step="any" placeholder="e.g. -38.0291">
+            </label>
+            <label>
+                Longitude
+                <input type="number" name="weather_home_lon" value="{{ config.bot.weather_home_lon }}" step="any" placeholder="e.g. 145.2591">
+            </label>
+        </div>
+        <label>
+            OpenWeatherMap API Key
+            <input type="password" name="openweathermap_api_key" value="" placeholder="Leave blank to keep current key">
+        </label>
+        <small>The saved API key is not displayed here. Enter a new key only when you want to replace it.</small><br>
+        <small>Enable the <strong>weather</strong>/<strong>wx</strong> and <strong>forecast</strong>/<strong>fx</strong> commands per channel in the Channel Management table below.</small>
+    </fieldset>
+
+    <fieldset>
+        <legend>Daily Forecast</legend>
+        <p><small>When enabled, the bot sends a 3-day forecast for the Weather Home Location to the selected channels at the configured hour each morning (Melbourne time).</small></p>
+        <label>
+            <input type="checkbox" name="daily_forecast_enabled" value="true" {% if config.bot.daily_forecast_enabled %}checked{% endif %}>
+            Enable daily forecast broadcast
+        </label>
+        <label>Forecast Channels</label>
+        <div class="grid">
+            {% for ch in config.bot.get_active_channels() %}
+            <label>
+                <input type="checkbox" name="daily_forecast_channels" value="{{ ch.id }}" {% if ch.id in config.bot.daily_forecast_channels %}checked{% endif %}>
+                {{ ch.id }}{% if ch.name %} ({{ ch.name }}){% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <small>At least one channel must be selected; leaving all unchecked will disable daily forecast.</small>
+
+        <div class="grid">
+            <label>
+                Broadcast Hour (0-23)
+                <input type="number" name="daily_forecast_hour" value="{{ config.bot.daily_forecast_hour }}" min="0" max="23" step="1">
+            </label>
+            <label>
+                Timezone
+                <input type="text" name="timezone" value="{{ config.bot.timezone }}" placeholder="e.g. Australia/Melbourne (leave blank for system local time)">
+            </label>
+        </div>
+        <small>Leave timezone blank to use the server's local time. Use an IANA timezone name (e.g. <code>Australia/Melbourne</code>, <code>America/New_York</code>) to override.</small>
+    </fieldset>
+
+    <fieldset>
+        <legend>Channel Management</legend>
+        <p><small>Configure which channels the bot listens on and which commands are enabled per channel. Changes require a restart.</small></p>
+
+        <table id="channels-table" role="grid">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>trace</th>
+                    <th>ping</th>
+                    <th>paths</th>
+                    <th>multipath</th>
+                    <th>prefix</th>
+                    <th>weather</th>
+                    <th>wx</th>
+                    <th>forecast</th>
+                    <th>fx</th>
+                    <th>help</th>
+                    <th>Rate Limit</th>
+                    <th>Timeout (s)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="channels-body">
+                {% for ch in config.bot.channels %}
+                <tr data-channel-id="{{ ch.id }}">
+                    <td><strong>{{ ch.id }}</strong></td>
+                    <td><input type="text" class="ch-name" value="{{ ch.name }}" placeholder="Channel {{ ch.id }}"></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="trace" {% if 'trace' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="ping" {% if 'ping' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="paths" {% if 'paths' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="multipath" {% if 'multipath' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="prefix" {% if 'prefix' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="weather" {% if 'weather' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="wx" {% if 'wx' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="forecast" {% if 'forecast' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="fx" {% if 'fx' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-cmd" data-cmd="help" {% if 'help' in ch.enabled_commands %}checked{% endif %}></td>
+                    <td><input type="checkbox" class="ch-rate-limit-enabled" {% if ch.rate_limit_enabled %}checked{% endif %}></td>
+                    <td><input type="number" class="ch-rate-limit-seconds" value="{{ ch.rate_limit_seconds }}" min="1" step="1"></td>
+                    <td><button type="button" class="outline secondary remove-channel-btn" title="Remove channel">&times;</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if not config.bot.channels %}
+        <p id="no-channels-msg"><small>No channels configured. Using default channel {{ config.bot.channel }} with all commands enabled.</small></p>
+        {% endif %}
+
+        <p><small>Rate limit applies per user, per channel. Default timeout is 120 seconds.</small></p>
+
+        <div class="grid">
+            <label>
+                Channel ID (0-7)
+                <input type="number" id="new-channel-id" min="0" max="7" value="0" placeholder="0-7">
+            </label>
+            <label>
+                Channel Name
+                <input type="text" id="new-channel-name" placeholder="e.g. General">
+            </label>
+            <label style="display: flex; align-items: flex-end;">
+                <button type="button" id="add-channel-btn" class="outline">Add Channel</button>
+            </label>
+        </div>
+    </fieldset>
+
+    <!-- Hidden field that carries the channels JSON to the server -->
+    <input type="hidden" name="channels_json" id="channels-json" value="[]">
+
+    <fieldset>
+        <legend>Web Server</legend>
+        <div class="grid">
+            <label>
+                Host
+                <input type="text" name="web_host" value="{{ config.web.host }}">
+            </label>
+            <label>
+                Port
+                <input type="number" name="web_port" value="{{ config.web.port }}" min="1" max="65535">
+            </label>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Guest Web Server</legend>
+        <label>
+            <input type="checkbox" name="guest_web_enabled" value="true" {% if config.guest_web.enabled %}checked{% endif %}>
+            Enable guest (read-only) web dashboard
+        </label>
+        <div class="grid">
+            <label>
+                Host
+                <input type="text" name="guest_web_host" value="{{ config.guest_web.host }}">
+            </label>
+            <label>
+                Port
+                <input type="number" name="guest_web_port" value="{{ config.guest_web.port }}" min="1" max="65535">
+            </label>
+        </div>
+
+        <label>Guest Ping Display Channels</label>
+        <div class="grid">
+            {% set guest_ping_candidates = config.bot.get_active_channels() %}
+            {% for ch in guest_ping_candidates if 'ping' in ch.enabled_commands %}
+            <label>
+                <input type="checkbox" name="guest_ping_channels" value="{{ ch.id }}" {% if ch.id in config.guest_web.ping_channels %}checked{% endif %}>
+                {{ ch.id }}{% if ch.name %} ({{ ch.name }}){% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <small>Select channels shown on the guest ping dashboard. If none are selected, all ping-enabled channels are shown. Requires restart to take effect.</small>
+    </fieldset>
+
+    <fieldset>
+        <legend>Logging</legend>
+        <label>
+            Level
+            <select name="log_level">
+                {% for lvl in ["DEBUG", "INFO", "WARNING", "ERROR"] %}
+                <option value="{{ lvl }}" {% if config.logging.level == lvl %}selected{% endif %}>{{ lvl }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </fieldset>
+
+    <button type="submit">Save Settings</button>
+</form>
+
+{% if not config.config_path %}
+<p><small>No config file path set. Start with <code>--config path/to/config.toml</code> to enable saving.</small></p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    /* ────────── Bot Channel Management (existing) ────────── */
+    const tbody = document.getElementById('channels-body');
+    const addBtn = document.getElementById('add-channel-btn');
+    const hiddenInput = document.getElementById('channels-json');
+    const noChannelsMsg = document.getElementById('no-channels-msg');
+
+    function syncHiddenField() {
+        const rows = tbody.querySelectorAll('tr[data-channel-id]');
+        const channels = [];
+        rows.forEach(function(row) {
+            const id = parseInt(row.getAttribute('data-channel-id'), 10);
+            const name = row.querySelector('.ch-name').value.trim();
+            const cmds = [];
+            row.querySelectorAll('.ch-cmd').forEach(function(cb) {
+                if (cb.checked) cmds.push(cb.getAttribute('data-cmd'));
+            });
+            var rateLimitEnabled = row.querySelector('.ch-rate-limit-enabled').checked;
+            var rateLimitSeconds = parseInt(row.querySelector('.ch-rate-limit-seconds').value, 10);
+            if (isNaN(rateLimitSeconds) || rateLimitSeconds < 1) rateLimitSeconds = 120;
+            channels.push({
+                id: id,
+                name: name,
+                enabled_commands: cmds,
+                rate_limit_enabled: rateLimitEnabled,
+                rate_limit_seconds: rateLimitSeconds
+            });
+        });
+        hiddenInput.value = JSON.stringify(channels);
+
+        if (noChannelsMsg) {
+            noChannelsMsg.style.display = rows.length > 0 ? 'none' : '';
+        }
+    }
+
+    function addChannelRow(id, name, cmds) {
+        var existing = tbody.querySelector('tr[data-channel-id="' + id + '"]');
+        if (existing) {
+            alert('Channel ' + id + ' is already configured.');
+            return;
+        }
+
+        if (noChannelsMsg) noChannelsMsg.style.display = 'none';
+
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-channel-id', id);
+
+        var allCmds = ['trace', 'ping', 'paths', 'multipath', 'prefix', 'weather', 'wx', 'forecast', 'fx', 'help'];
+        var html = '<td><strong>' + id + '</strong></td>';
+        html += '<td><input type="text" class="ch-name" value="' + (name || '') + '" placeholder="Channel ' + id + '"></td>';
+        allCmds.forEach(function(cmd) {
+            var checked = cmds.indexOf(cmd) >= 0 ? ' checked' : '';
+            html += '<td><input type="checkbox" class="ch-cmd" data-cmd="' + cmd + '"' + checked + '></td>';
+        });
+        html += '<td><input type="checkbox" class="ch-rate-limit-enabled" checked></td>';
+        html += '<td><input type="number" class="ch-rate-limit-seconds" value="120" min="1" step="1"></td>';
+        html += '<td><button type="button" class="outline secondary remove-channel-btn" title="Remove channel">&times;</button></td>';
+
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+
+        tr.querySelector('.remove-channel-btn').addEventListener('click', function() {
+            tr.remove();
+            syncHiddenField();
+        });
+        tr.querySelector('.ch-name').addEventListener('input', syncHiddenField);
+        tr.querySelectorAll('.ch-cmd').forEach(function(cb) {
+            cb.addEventListener('change', syncHiddenField);
+        });
+        tr.querySelector('.ch-rate-limit-enabled').addEventListener('change', syncHiddenField);
+        tr.querySelector('.ch-rate-limit-seconds').addEventListener('input', syncHiddenField);
+
+        syncHiddenField();
+    }
+
+    tbody.querySelectorAll('.remove-channel-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            btn.closest('tr').remove();
+            syncHiddenField();
+        });
+    });
+
+    tbody.querySelectorAll('.ch-name').forEach(function(input) {
+        input.addEventListener('input', syncHiddenField);
+    });
+    tbody.querySelectorAll('.ch-cmd').forEach(function(cb) {
+        cb.addEventListener('change', syncHiddenField);
+    });
+    tbody.querySelectorAll('.ch-rate-limit-enabled').forEach(function(cb) {
+        cb.addEventListener('change', syncHiddenField);
+    });
+    tbody.querySelectorAll('.ch-rate-limit-seconds').forEach(function(input) {
+        input.addEventListener('input', syncHiddenField);
+    });
+
+    addBtn.addEventListener('click', function() {
+        var idInput = document.getElementById('new-channel-id');
+        var nameInput = document.getElementById('new-channel-name');
+        var id = parseInt(idInput.value, 10);
+        if (isNaN(id) || id < 0 || id > 7) {
+            alert('Channel ID must be between 0 and 7.');
+            return;
+        }
+        addChannelRow(id, nameInput.value.trim(), ['trace', 'ping', 'paths', 'prefix']);
+        nameInput.value = '';
+    });
+
+    document.getElementById('settings-form').addEventListener('htmx:configRequest', function() {
+        syncHiddenField();
+    });
+
+    syncHiddenField();
+
+    /* ────────── Lightning / Daily Forecast: disable enable when no channels ────────── */
+    function syncFeatureEnabled(channelCheckboxName, enabledCheckboxName) {
+        var channelBoxes = document.querySelectorAll('input[name="' + channelCheckboxName + '"]');
+        var enabledBox = document.querySelector('input[name="' + enabledCheckboxName + '"]');
+        if (!enabledBox || channelBoxes.length === 0) return;
+
+        function update() {
+            var anyChecked = Array.prototype.some.call(channelBoxes, function(cb) { return cb.checked; });
+            if (!anyChecked) enabledBox.checked = false;
+            enabledBox.disabled = !anyChecked;
+        }
+
+        channelBoxes.forEach(function(cb) { cb.addEventListener('change', update); });
+        update();
+    }
+
+    syncFeatureEnabled('daily_forecast_channels', 'daily_forecast_enabled');
+
+    /* ────────── Helper: show toast ────────── */
+    function showToast(message, type) {
+        var container = document.getElementById('toast-container');
+        var div = document.createElement('div');
+        div.className = 'toast toast-' + (type || 'info');
+        div.setAttribute('role', 'alert');
+        div.innerHTML = '<span>' + message + '</span><button class="toast-close" onclick="this.parentElement.remove()">&times;</button>';
+        container.prepend(div);
+        setTimeout(function() {
+            div.style.opacity = '0';
+            setTimeout(function() { div.remove(); }, 300);
+        }, 5000);
+    }
+
+    /* ────────── Radio Settings (live from device) ────────── */
+    var radioFields = document.getElementById('radio-fields-inner');
+    var radioLoading = document.getElementById('radio-loading');
+    var radioDisconnected = document.getElementById('radio-not-connected');
+
+    function loadRadioInfo() {
+        fetch('/api/radio/info')
+            .then(function(r) { return r.json(); })
+            .then(function(info) {
+                radioLoading.style.display = 'none';
+                if (info.error) {
+                    radioDisconnected.style.display = '';
+                    radioFields.style.display = 'none';
+                    return;
+                }
+                radioDisconnected.style.display = 'none';
+                radioFields.style.display = '';
+
+                document.getElementById('radio-name').value = info.name || '';
+                document.getElementById('radio-pubkey').value = info.public_key || '';
+                document.getElementById('radio-tx-power').value = info.tx_power != null ? info.tx_power : '';
+                document.getElementById('radio-max-tx-power').value = info.max_tx_power != null ? info.max_tx_power : '';
+                document.getElementById('radio-freq').value = info.radio_freq != null ? info.radio_freq : '';
+                document.getElementById('radio-bw').value = info.radio_bw != null ? info.radio_bw : '';
+                document.getElementById('radio-sf').value = info.radio_sf != null ? info.radio_sf : '';
+                document.getElementById('radio-cr').value = info.radio_cr != null ? info.radio_cr : '';
+                document.getElementById('radio-lat').value = info.adv_lat != null ? info.adv_lat : '';
+                document.getElementById('radio-lon').value = info.adv_lon != null ? info.adv_lon : '';
+            })
+            .catch(function() {
+                radioLoading.style.display = 'none';
+                radioDisconnected.style.display = '';
+            });
+    }
+
+    document.getElementById('radio-save-btn').addEventListener('click', function() {
+        var btn = this;
+        btn.setAttribute('aria-busy', 'true');
+        btn.disabled = true;
+
+        var name = document.getElementById('radio-name').value.trim();
+        var txPower = parseInt(document.getElementById('radio-tx-power').value, 10);
+        var freq = parseFloat(document.getElementById('radio-freq').value);
+        var bw = parseFloat(document.getElementById('radio-bw').value);
+        var sf = parseInt(document.getElementById('radio-sf').value, 10);
+        var cr = parseInt(document.getElementById('radio-cr').value, 10);
+        var lat = parseFloat(document.getElementById('radio-lat').value);
+        var lon = parseFloat(document.getElementById('radio-lon').value);
+
+        // Send all radio settings in parallel
+        var promises = [];
+
+        if (name) {
+            promises.push(
+                fetch('/api/radio/name', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: name})
+                }).then(function(r) { return r.json(); })
+            );
+        }
+
+        if (!isNaN(txPower)) {
+            promises.push(
+                fetch('/api/radio/tx_power', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({tx_power: txPower})
+                }).then(function(r) { return r.json(); })
+            );
+        }
+
+        if (!isNaN(freq) && !isNaN(bw) && !isNaN(sf) && !isNaN(cr)) {
+            promises.push(
+                fetch('/api/radio/params', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({freq: freq, bw: bw, sf: sf, cr: cr})
+                }).then(function(r) { return r.json(); })
+            );
+        }
+
+        if (!isNaN(lat) && !isNaN(lon)) {
+            promises.push(
+                fetch('/api/radio/coords', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({lat: lat, lon: lon})
+                }).then(function(r) { return r.json(); })
+            );
+        }
+
+        Promise.all(promises).then(function(results) {
+            btn.removeAttribute('aria-busy');
+            btn.disabled = false;
+            var errors = results.filter(function(r) { return r.error; });
+            if (errors.length > 0) {
+                showToast('Some settings failed: ' + errors.map(function(e) { return e.error; }).join(', '), 'error');
+            } else {
+                showToast('Radio settings saved to device', 'success');
+                loadRadioInfo();
+            }
+        }).catch(function() {
+            btn.removeAttribute('aria-busy');
+            btn.disabled = false;
+            showToast('Failed to save radio settings', 'error');
+        });
+    });
+
+    loadRadioInfo();
+
+    /* ────────── Radio Channels (live from device) ────────── */
+    var rcBody = document.getElementById('radio-channels-body');
+    var rcTable = document.getElementById('radio-channels-table');
+    var rcLoading = document.getElementById('radio-channels-loading');
+    var rcRefreshBtn = document.getElementById('radio-channels-refresh-btn');
+
+    function loadRadioChannels() {
+        rcRefreshBtn.setAttribute('aria-busy', 'true');
+        rcRefreshBtn.disabled = true;
+        rcLoading.style.display = '';
+        rcTable.style.display = 'none';
+
+        fetch('/api/radio/channels')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                rcLoading.style.display = 'none';
+                rcRefreshBtn.removeAttribute('aria-busy');
+                rcRefreshBtn.disabled = false;
+
+                if (data.error) {
+                    showToast('Could not read channels: ' + data.error, 'error');
+                    return;
+                }
+
+                rcTable.style.display = '';
+                rcBody.innerHTML = '';
+
+                data.forEach(function(ch) {
+                    var tr = document.createElement('tr');
+                    var idx = ch.channel_idx;
+                    var name = ch.channel_name || '';
+                    var secretHex = ch.channel_secret_hex || '';
+                    var hash = ch.channel_hash || '';
+                    tr.innerHTML =
+                        '<td><strong>' + idx + '</strong></td>' +
+                        '<td><input type="text" class="rc-name" data-idx="' + idx + '" value="' + name.replace(/"/g, '&quot;') + '" placeholder="(empty)"></td>' +
+                        '<td><input type="text" class="rc-key" data-idx="' + idx + '" value="" placeholder="Set new key..." autocomplete="off"></td>' +
+                        '<td><code class="rc-secret" style="font-size:0.75em;word-break:break-all;">' + (secretHex || '<em>masked</em>') + '</code></td>' +
+                        '<td><code class="rc-hash">' + (hash || '—') + '</code></td>' +
+                        '<td><button type="button" class="outline rc-save-btn" data-idx="' + idx + '">Save</button></td>';
+                    rcBody.appendChild(tr);
+
+                    tr.querySelector('.rc-save-btn').addEventListener('click', function() {
+                        var saveBtn = this;
+                        var newName = tr.querySelector('.rc-name').value.trim();
+                        var newKey = tr.querySelector('.rc-key').value.trim();
+                        saveBtn.setAttribute('aria-busy', 'true');
+                        saveBtn.disabled = true;
+
+                        var promises = [];
+
+                        if (newName) {
+                            promises.push(
+                                fetch('/api/radio/channel', {
+                                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({channel_idx: idx, channel_name: newName})
+                                }).then(function(r) { return r.json(); })
+                            );
+                        }
+
+                        if (newKey) {
+                            var keyWithHash = newKey.startsWith('#') ? newKey : '#' + newKey;
+                            promises.push(
+                                fetch('/api/radio/channel', {
+                                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({channel_idx: idx, channel_name: keyWithHash})
+                                }).then(function(r) { return r.json(); })
+                            );
+                        }
+
+                        if (promises.length === 0) {
+                            saveBtn.removeAttribute('aria-busy');
+                            saveBtn.disabled = false;
+                            showToast('No changes to save for channel ' + idx, 'info');
+                            return;
+                        }
+
+                        Promise.all(promises)
+                        .then(function(results) {
+                            saveBtn.removeAttribute('aria-busy');
+                            saveBtn.disabled = false;
+                            var errors = results.filter(function(r) { return r && r.error; });
+                            if (errors.length > 0) {
+                                showToast('Channel ' + idx + ': ' + errors.map(function(e) { return e.error; }).join(', '), 'error');
+                            } else {
+                                tr.querySelector('.rc-key').value = '';
+                                showToast('Channel ' + idx + ' updated on radio', 'success');
+                                // Re-read all channels to refresh masked secret/hash display
+                                loadRadioChannels();
+                            }
+                        })
+                        .catch(function() {
+                            saveBtn.removeAttribute('aria-busy');
+                            saveBtn.disabled = false;
+                            showToast('Failed to update channel ' + idx, 'error');
+                        });
+                    });
+                });
+            })
+            .catch(function() {
+                rcLoading.style.display = 'none';
+                rcRefreshBtn.removeAttribute('aria-busy');
+                rcRefreshBtn.disabled = false;
+                showToast('Failed to reach radio for channel info', 'error');
+            });
+    }
+
+    rcRefreshBtn.addEventListener('click', loadRadioChannels);
+    loadRadioChannels();
+})();
+</script>
+{% endblock %}

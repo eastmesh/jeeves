@@ -1,0 +1,12 @@
+<tr class="message-{{ msg.direction | default('in') }}">
+    <td><small>{{ msg.timestamp | default('--') }}</small></td>
+    <td>
+        {% if msg.direction == 'out' %}
+        <span class="badge-out">OUT</span>
+        {% else %}
+        <span class="badge-in">IN</span>
+        {% endif %}
+    </td>
+    <td>{{ msg.peer | default('--') }}</td>
+    <td>{{ msg.text | default('') }}</td>
+</tr>

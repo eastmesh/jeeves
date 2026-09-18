@@ -1,0 +1,75 @@
+# MeshCore PathBot Configuration
+
+[connection]
+type = "serial"                    # "serial", "tcp", or "ble"
+serial_port = "/dev/ttyUSB0"       # Serial device path (Linux) or "COM3" (Windows)
+serial_baud = 115200
+# tcp_host = "192.168.1.100"
+# tcp_port = 5000
+# ble_address = "AA:BB:CC:DD:EE:FF"
+auto_reconnect = true
+max_reconnect_attempts = 10
+tcp_health_check_interval = 30      # TCP companion watchdog interval in seconds (0 = disabled)
+tcp_reconnect_delay = 5             # Delay between TCP reconnect attempts
+
+[bot]
+node_name = ""                     # Friendly name for this MeshCore node
+flood_scope = ""                 # Optional MeshCore region, e.g. "au-vic"
+channel = 2                        # Default channel (used when no [[bot.channels]] defined)
+repeaters_file = "repeaters.db"    # Path to repeater SQLite database
+ignore_list = ["jeeves"]           # Node names to ignore (case-insensitive partial match)
+home_repeater_name = ""            # Exact name of the home repeater
+home_repeater_prefix = ""          # Prefix to match home repeater name (lowercase)
+lat = 0.0                          # Bot latitude (0.0 = unset)
+lon = 0.0                          # Bot longitude (0.0 = unset)
+weather_home_name = "Hampton Park" # Default suburb for scheduled forecast display
+weather_home_lat = -38.0291        # Latitude of home suburb (used by scheduled forecast)
+weather_home_lon = 145.2591        # Longitude of home suburb (used by scheduled forecast)
+weather_home_postcode = "3976"     # Default AU postcode for weather/forecast commands
+openweathermap_api_key = ""        # Required for weather/forecast commands (https://openweathermap.org/api)
+
+
+# Daily forecast — send 3-day forecast for the weather home location at a set hour
+daily_forecast_enabled = false
+daily_forecast_channels = []       # Channel IDs to broadcast on (empty = all active channels)
+daily_forecast_hour = 6            # Hour to send forecast (Melbourne time, 0-23)
+
+# Channel management — define multiple channels with per-channel command control.
+# If no [[bot.channels]] entries exist, the bot falls back to bot.channel above.
+# enabled_commands can include: "trace", "ping", "paths", "multipath", "prefix", "weather", "wx", "forecast", "fx", "help"
+# Daily forecast is a scheduled feature (not a per-user command)
+# Note: "weather"/"wx" and "forecast"/"fx" use OpenWeatherMap by AU postcode, require openweathermap_api_key,
+# and default to off — add them explicitly to enable per channel
+# rate_limit_enabled enables per-user command rate limiting on the channel
+# rate_limit_seconds is the per-user cooldown window (default 120 seconds)
+
+[[bot.channels]]
+id = 1
+name = "General"
+enabled_commands = ["trace", "ping", "paths", "prefix"]
+rate_limit_enabled = true
+rate_limit_seconds = 120
+
+[[bot.channels]]
+id = 2
+name = "Monitoring"
+enabled_commands = ["trace", "ping"]
+rate_limit_enabled = false
+rate_limit_seconds = 120
+
+[web]
+enabled = true
+host = "0.0.0.0"
+port = 8075
+
+[logging]
+level = "INFO"
+# file = "/var/log/meshcore-pathbot.log"
+
+
+[guest_web]
+enabled = false
+host = "0.0.0.0"
+port = 8076
+# Optional: channels to show in guest ping dashboard (empty = all ping-enabled channels)
+ping_channels = []

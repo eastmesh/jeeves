@@ -1,0 +1,13 @@
+<ul>
+    <li><strong>Jeeves2.0</strong></li>
+</ul>
+<ul>
+    <li><a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a></li>
+    <li><a href="/messages" {% if request.url.path == "/messages" %}aria-current="page"{% endif %}>Messages</a></li>
+    <li><a href="/repeaters" {% if request.url.path == "/repeaters" %}aria-current="page"{% endif %}>Repeaters</a></li>
+    <li><a href="/overlaps" {% if request.url.path == "/overlaps" %}aria-current="page"{% endif %}>Overlaps</a></li>
+    <li><a href="/paths" {% if request.url.path == "/paths" %}aria-current="page"{% endif %}>Paths</a></li>
+    <li><a href="/packets" {% if request.url.path == "/packets" %}aria-current="page"{% endif %}>Packets</a></li>
+    <li><a href="/stats" {% if request.url.path == "/stats" %}aria-current="page"{% endif %}>Stats</a></li>
+    <li><a href="/settings" {% if request.url.path == "/settings" %}aria-current="page"{% endif %}>Settings</a></li>
+</ul>

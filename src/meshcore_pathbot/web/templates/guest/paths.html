@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Path Resolver - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Path Resolver</h2>
+
+<p><small>Enter a raw hex path string to resolve it into repeater names (plain, colon-separated, or comma-separated).</small></p>
+
+<form id="path-resolve-form" hx-post="/paths/resolve" hx-target="#path-result" hx-swap="innerHTML">
+    <fieldset role="group">
+        <input
+            type="text"
+            name="raw_path"
+            placeholder="e.g. c132fa9d7a or c1:32:fa:9d:7a or c1c2:fab3 (multibyte)"
+            pattern="[0-9a-fA-F:, ]*"
+            value="{{ raw_path or '' }}"
+            required
+        >
+        <input type="hidden" id="selected-repeaters" name="selected_repeaters" value="{}">
+        <button type="submit">Resolve</button>
+    </fieldset>
+</form>
+
+<div id="path-result">
+    {% if hops is not none %}
+    {% include "partials/path_display.html" %}
+    {% endif %}
+</div>
+
+<hr>
+
+<h2>Companion Path Search</h2>
+
+<p><small>Search by companion name to see all paths they have been heard via.</small></p>
+
+<form hx-post="/paths/search" hx-target="#user-path-result" hx-swap="innerHTML">
+    <fieldset role="group">
+        <input
+            type="text"
+            name="peer_name"
+            placeholder="Enter companion name"
+            list="peer-list"
+            required
+        >
+        <button type="submit">Search</button>
+    </fieldset>
+</form>
+
+<datalist id="peer-list">
+    {% for peer in peers %}
+    <option value="{{ peer }}">
+    {% endfor %}
+</datalist>
+
+<div id="user-path-result"></div>
+
+<script>
+(function () {
+    function bindPrefixSelectors() {
+        var hiddenInput = document.getElementById('selected-repeaters');
+        if (!hiddenInput) {
+            return;
+        }
+        var selects = document.querySelectorAll('.prefix-option-select');
+        selects.forEach(function (selectEl) {
+            if (selectEl.dataset.bound === '1') {
+                return;
+            }
+            selectEl.dataset.bound = '1';
+            selectEl.addEventListener('change', function () {
+                var prefix = selectEl.getAttribute('data-prefix') || '';
+                if (!prefix) {
+                    return;
+                }
+
+                var selections = {};
+                try {
+                    selections = JSON.parse(hiddenInput.value || '{}') || {};
+                } catch (e) {
+                    selections = {};
+                }
+
+                if (selectEl.value) {
+                    selections[prefix] = selectEl.value;
+                } else {
+                    delete selections[prefix];
+                }
+
+                hiddenInput.value = JSON.stringify(selections);
+                var form = document.getElementById('path-resolve-form');
+                if (form) {
+                    form.requestSubmit();
+                }
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', bindPrefixSelectors);
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        if (evt.target && evt.target.id === 'path-result') {
+            bindPrefixSelectors();
+        }
+    });
+})();
+</script>
+{% endblock %}

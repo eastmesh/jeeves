@@ -1,0 +1,19 @@
+<tr id="repeater-{{ r.public_key }}">
+    <td><strong>{{ r.name }}</strong></td>
+    <td><code>{{ r.prefix }}</code></td>
+    <td><small>{{ r.type | adv_type_name }}</small></td>
+    <td>{{ "%.4f" | format(r.lat) if r.lat else '--' }}</td>
+    <td>{{ "%.4f" | format(r.lon) if r.lon else '--' }}</td>
+    <td title="{{ r.last_seen | fmt_datetime }}"><small>{{ r.last_seen | fmt_relative }}</small></td>
+    <td>
+        <button
+            class="outline secondary"
+            hx-delete="/repeaters/{{ r.public_key }}"
+            hx-target="#repeater-{{ r.public_key }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete node {{ r.name }}?"
+        >
+            Delete
+        </button>
+    </td>
+</tr>

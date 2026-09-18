@@ -1,0 +1,6 @@
+<p>
+    <strong>{{ stats.messages_in }}</strong> in /
+    <strong>{{ stats.messages_out }}</strong> out /
+    <strong>{{ stats.commands_processed }}</strong> commands
+    {% if stats.errors %} / <strong>{{ stats.errors }}</strong> errors{% endif %}
+</p>

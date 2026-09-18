@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Stats - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Statistics</h2>
+
+<div class="grid">
+    <article>
+        <header>Connection</header>
+        <p>
+            <span class="status-dot {% if connected %}status-ok{% else %}status-err{% endif %}"></span>
+            {% if connected %}Connected{% else %}Disconnected{% endif %}
+        </p>
+    </article>
+    <article>
+        <header>Uptime</header>
+        <p><span hx-get="/api/uptime" hx-trigger="every 10s" hx-swap="innerHTML">--</span></p>
+    </article>
+</div>
+
+<div class="grid">
+    <article>
+        <header>Messages Received</header>
+        <p><strong>{{ stats.messages_in }}</strong></p>
+    </article>
+    <article>
+        <header>Messages Sent</header>
+        <p><strong>{{ stats.messages_out }}</strong></p>
+    </article>
+    <article>
+        <header>Commands Processed</header>
+        <p><strong>{{ stats.commands_processed }}</strong></p>
+    </article>
+    <article>
+        <header>Errors</header>
+        <p><strong>{{ stats.errors }}</strong></p>
+    </article>
+</div>
+
+<h3>Repeater Database</h3>
+<div class="grid">
+    <article>
+        <header>Total Repeaters</header>
+        <p><strong>{{ db_stats.total }}</strong></p>
+    </article>
+    <article>
+        <header>Unique Prefixes</header>
+        <p><strong>{{ db_stats.unique_prefixes }}</strong></p>
+    </article>
+    <article>
+        <header>Prefix Collisions</header>
+        <p><strong>{{ db_stats.collisions }}</strong></p>
+    </article>
+    <article>
+        <header>With Location</header>
+        <p><strong>{{ db_stats.with_location }}</strong></p>
+    </article>
+</div>
+
+
+<h3>Guest Page Visits</h3>
+<div class="grid">
+    <article>
+        <header>Total Guest Hits</header>
+        <p><strong>{{ db_stats.guest_visitors.total_hits }}</strong></p>
+    </article>
+    <article>
+        <header>Unique Guest IPs</header>
+        <p><strong>{{ db_stats.guest_visitors.unique_ips }}</strong></p>
+    </article>
+    <article>
+        <header>Unique Guest Pages</header>
+        <p><strong>{{ db_stats.guest_visitors.unique_pages }}</strong></p>
+    </article>
+</div>
+
+<div class="grid">
+    <article>
+        <header>Top Guest Pages</header>
+        {% if db_stats.guest_visitors.top_pages %}
+        <ul>
+            {% for item in db_stats.guest_visitors.top_pages %}
+            <li><code>{{ item.path }}</code> — {{ item.hits }} hits</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p><small>No guest visits recorded yet.</small></p>
+        {% endif %}
+    </article>
+    <article>
+        <header>Top Guest IPs</header>
+        {% if db_stats.guest_visitors.top_ips %}
+        <ul>
+            {% for item in db_stats.guest_visitors.top_ips %}
+            <li><code>{{ item.ip }}</code> — {{ item.hits }} hits</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p><small>No guest visits recorded yet.</small></p>
+        {% endif %}
+    </article>
+</div>
+
+<article>
+    <header>Recent Guest Page Access</header>
+    {% if db_stats.guest_visitors.recent_visits %}
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>IP</th>
+                <th>Path</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for visit in db_stats.guest_visitors.recent_visits %}
+            <tr>
+                <td title="{{ visit.visited_at | fmt_datetime }}">{{ visit.visited_at | fmt_relative }}</td>
+                <td><code>{{ visit.ip }}</code></td>
+                <td><code>{{ visit.path }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p><small>No guest visits recorded yet.</small></p>
+    {% endif %}
+</article>
+
+<div hx-ext="sse" sse-connect="/api/stats/stream">
+    <div id="live-stats-detail" sse-swap="stats_update" hx-swap="innerHTML"></div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Pings - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Pings</h2>
+
+<article>
+    <header>Last 10 Ping Responses</header>
+    {% if ping_responses %}
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Response</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for msg in ping_responses %}
+            <tr>
+                <td title="{{ msg.timestamp | fmt_datetime }}">{{ msg.timestamp | fmt_time }}</td>
+                <td>{{ msg.text }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p><small>No ping responses found.</small></p>
+    {% endif %}
+</article>
+{% endblock %}

@@ -1,0 +1,7 @@
+<ul>
+    <li><strong>Jeeves2.0</strong></li>
+</ul>
+<ul>
+    <li><a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Pings</a></li>
+    <li><a href="/paths" {% if request.url.path == "/paths" %}aria-current="page"{% endif %}>Paths</a></li>
+</ul>

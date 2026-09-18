@@ -1,0 +1,68 @@
+{% if results %}
+<article>
+    <header>Paths seen for <strong>{{ peer_name }}</strong> ({{ results | length }} unique)</header>
+    {% for entry in results %}
+    <div class="user-path-entry">
+        {% if entry.hops %}
+        <div class="path-chain">
+            {% for hop in entry.hops %}
+            <span class="hop {% if hop.get('resolved', false) %}resolved{% else %}unresolved{% endif %} {% if hop.get('ambiguous', false) %}ambiguous{% endif %}"
+                  title="{{ hop.get('public_key', hop.get('prefix', '')) }}">
+                {{ hop.name }}{% if hop.get('ambiguous', false) %}?{% endif %}
+                {% if hop.lat and hop.lon %}
+                <small>({{ "%.2f" | format(hop.lat) }}, {{ "%.2f" | format(hop.lon) }})</small>
+                {% endif %}
+                {% if hop.get('distance_from_prev') is not none %}
+                <small>{{ hop.distance_from_prev }} km from previous hop</small>
+                {% endif %}
+                {% if hop.get('options') %}
+                <details>
+                    <summary><small>{{ hop.options | length }} repeater options for prefix {{ hop.prefix }}</small></summary>
+                    <ul>
+                        {% for option in hop.options %}
+                        <li>{{ option.name }}{% if option.lat and option.lon %} ({{ "%.2f" | format(option.lat) }}, {{ "%.2f" | format(option.lon) }}){% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+            </span>
+            {% if not loop.last %}
+            <span class="arrow-group">
+                <span class="arrow">&rarr;</span>
+                {% set next_hop = entry.hops[loop.index] %}
+                {% if next_hop.get('distance_from_prev') is not none %}
+                <span class="hop-distance">{{ next_hop.distance_from_prev }} km</span>
+                {% endif %}
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+        <small>
+            {{ entry.hops | length }} hops
+            {% set distances = [] %}
+            {% for hop in entry.hops %}
+                {% if hop.get('distance_from_prev') is not none %}
+                    {% if distances.append(hop.distance_from_prev) %}{% endif %}
+                {% endif %}
+            {% endfor %}
+            {% if distances %}
+            | Total: {{ "%.1f" | format(distances | sum) }} km
+            {% endif %}
+            | Resolved: <code>{{ entry.resolved_str }}</code>
+            | Raw: <code>{{ entry.raw_str }}</code>
+        </small>
+        {% else %}
+        <div class="path-chain">
+            <span class="hop resolved">Direct</span>
+        </div>
+        <small>{{ entry.resolved_str }} | {{ entry.raw_str }}</small>
+        {% endif %}
+    </div>
+    {% if not loop.last %}<hr>{% endif %}
+    {% endfor %}
+</article>
+{% elif peer_name %}
+<article>
+    <p>No paths found for user <strong>{{ peer_name }}</strong>.</p>
+</article>
+{% endif %}

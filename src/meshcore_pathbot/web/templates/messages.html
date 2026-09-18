@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Messages - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Live Message Feed</h2>
+
+<p><small>{{ stats.messages_in }} received / {{ stats.messages_out }} sent | {{ messages | length }} in history</small></p>
+
+<div hx-ext="sse" sse-connect="/api/messages/stream">
+    <table role="grid">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Dir</th>
+                <th>From/To</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody id="message-list" sse-swap="msg_in" hx-swap="afterbegin">
+            {% for msg in messages %}
+            <tr>
+                <td><small>{{ msg.timestamp | fmt_time }}</small></td>
+                <td>
+                    {% if msg.direction == 'out' %}
+                    <span class="badge-out">OUT</span>
+                    {% else %}
+                    <span class="badge-in">IN</span>
+                    {% endif %}
+                </td>
+                <td>{{ msg.peer }}</td>
+                <td>{{ msg.text }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p><small>New messages appear in real-time. History is preserved across page reloads and bot restarts.</small></p>
+{% endblock %}

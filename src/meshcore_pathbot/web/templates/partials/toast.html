@@ -1,0 +1,4 @@
+<div class="toast toast-{{ type | default('info') }}" role="alert">
+    <span>{{ message }}</span>
+    <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+</div>

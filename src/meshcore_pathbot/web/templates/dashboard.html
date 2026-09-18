@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+
+<div class="grid">
+    <article>
+        <header>Connection</header>
+        <p>
+            <span class="status-dot {% if connected %}status-ok{% else %}status-err{% endif %}"></span>
+            {% if connected %}Connected{% else %}Disconnected{% endif %}
+        </p>
+        <p><small>Channels: {% for ch in channels %}{{ ch.id }}{% if ch.name %} ({{ ch.name }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</small></p>
+    </article>
+    <article>
+        <header>Messages</header>
+        <p><strong>{{ stats.messages_in }}</strong> in / <strong>{{ stats.messages_out }}</strong> out</p>
+        <p><small>{{ stats.commands_processed }} commands processed</small></p>
+    </article>
+    <article>
+        <header>Repeater DB</header>
+        <p><strong>{{ db_stats.total }}</strong> repeaters</p>
+        <p><small>{{ db_stats.with_location }} with location | {{ db_stats.collisions }} prefix collisions</small></p>
+    </article>
+</div>
+
+<div class="grid">
+    <article>
+        <header>Messages <small>(24h)</small></header>
+        <p style="font-size:1.8rem; margin:0;"><strong>{{ totals_24h.msg_in }}</strong></p>
+        <p><small>received &nbsp;|&nbsp; <strong>{{ totals_24h.msg_out }}</strong> sent</small></p>
+    </article>
+</div>
+
+<article>
+    <header>Activity — last 24 hours</header>
+    <canvas id="dashboard-chart" height="80"></canvas>
+</article>
+
+<div hx-ext="sse" sse-connect="/api/stats/stream">
+    <article>
+        <header>Live Activity</header>
+        <div id="live-stats" sse-swap="stats_update" hx-swap="innerHTML">
+            <p>Waiting for activity...</p>
+        </div>
+    </article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    fetch('/api/packets/hourly')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var base = { tension: 0.3, fill: true, pointRadius: 2 };
+            new Chart(document.getElementById('dashboard-chart'), {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        Object.assign({}, base, {
+                            label: 'Messages In',
+                            data: data.msg_in,
+                            borderColor: '#2ecc40',
+                            backgroundColor: 'rgba(46,204,64,0.08)',
+                        }),
+                        Object.assign({}, base, {
+                            label: 'Messages Out',
+                            data: data.msg_out,
+                            borderColor: '#0074d9',
+                            backgroundColor: 'rgba(0,116,217,0.08)',
+                        })
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 12 } },
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                    },
+                },
+            });
+        });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Packets - Jeeves2.0{% endblock %}
+{% block content %}
+<h2>Packet Activity</h2>
+
+<div class="grid">
+    <article>
+        <header>Messages In <small>(24h)</small></header>
+        <p style="font-size:2rem; margin:0;"><strong>{{ totals.msg_in }}</strong></p>
+        <p><small>channel messages received</small></p>
+    </article>
+    <article>
+        <header>Messages Out <small>(24h)</small></header>
+        <p style="font-size:2rem; margin:0;"><strong>{{ totals.msg_out }}</strong></p>
+        <p><small>bot replies sent</small></p>
+    </article>
+    <article>
+        <header>Adverts <small>(24h)</small></header>
+        <p style="font-size:2rem; margin:0;"><strong>{{ totals.advert }}</strong></p>
+        <p><small>node advertisements received</small></p>
+    </article>
+</div>
+
+<article>
+    <header>Packets over the last 24 hours</header>
+    <canvas id="packets-chart" height="90"></canvas>
+</article>
+
+<article>
+    <header>Adverts over the last 24 hours</header>
+    <canvas id="adverts-chart" height="90"></canvas>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    fetch('/api/packets/hourly')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var chartDefaults = {
+                tension: 0.3,
+                fill: true,
+                pointRadius: 2,
+            };
+
+            // Messages chart (in + out)
+            new Chart(document.getElementById('packets-chart'), {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        Object.assign({}, chartDefaults, {
+                            label: 'Messages In',
+                            data: data.msg_in,
+                            borderColor: '#2ecc40',
+                            backgroundColor: 'rgba(46,204,64,0.08)',
+                        }),
+                        Object.assign({}, chartDefaults, {
+                            label: 'Messages Out',
+                            data: data.msg_out,
+                            borderColor: '#0074d9',
+                            backgroundColor: 'rgba(0,116,217,0.08)',
+                        }),
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 12 } },
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                    },
+                },
+            });
+
+            // Adverts chart
+            new Chart(document.getElementById('adverts-chart'), {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        Object.assign({}, chartDefaults, {
+                            label: 'Adverts',
+                            data: data.advert,
+                            borderColor: '#ff851b',
+                            backgroundColor: 'rgba(255,133,27,0.08)',
+                        }),
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 12 } },
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                    },
+                },
+            });
+        });
+})();
+</script>
+{% endblock %}
