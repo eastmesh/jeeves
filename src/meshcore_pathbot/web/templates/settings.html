@@ -277,6 +277,7 @@
                     <th>help</th>
                     <th>Rate Limit</th>
                     <th>Timeout (s)</th>
+                    <th>Scope</th>
                     <th></th>
                 </tr>
             </thead>
@@ -297,6 +298,7 @@
                     <td><input type="checkbox" class="ch-cmd" data-cmd="help" {% if 'help' in ch.enabled_commands %}checked{% endif %}></td>
                     <td><input type="checkbox" class="ch-rate-limit-enabled" {% if ch.rate_limit_enabled %}checked{% endif %}></td>
                     <td><input type="number" class="ch-rate-limit-seconds" value="{{ ch.rate_limit_seconds }}" min="1" step="1"></td>
+                    <td><input type="text" class="ch-scope" value="{{ ch.scope }}" placeholder="{{ config.bot.flood_scope or 'inherit' }}" title="Region for sends on this channel. Blank inherits bot.flood_scope; * forces unscoped."></td>
                     <td><button type="button" class="outline secondary remove-channel-btn" title="Remove channel">&times;</button></td>
                 </tr>
                 {% endfor %}
@@ -418,7 +420,8 @@
                 name: name,
                 enabled_commands: cmds,
                 rate_limit_enabled: rateLimitEnabled,
-                rate_limit_seconds: rateLimitSeconds
+                rate_limit_seconds: rateLimitSeconds,
+                scope: row.querySelector('.ch-scope').value.trim()
             });
         });
         hiddenInput.value = JSON.stringify(channels);
@@ -449,6 +452,7 @@
         });
         html += '<td><input type="checkbox" class="ch-rate-limit-enabled" checked></td>';
         html += '<td><input type="number" class="ch-rate-limit-seconds" value="120" min="1" step="1"></td>';
+        html += '<td><input type="text" class="ch-scope" value="" placeholder="inherit" title="Region for sends on this channel. Blank inherits bot.flood_scope; * forces unscoped."></td>';
         html += '<td><button type="button" class="outline secondary remove-channel-btn" title="Remove channel">&times;</button></td>';
 
         tr.innerHTML = html;
@@ -464,6 +468,7 @@
         });
         tr.querySelector('.ch-rate-limit-enabled').addEventListener('change', syncHiddenField);
         tr.querySelector('.ch-rate-limit-seconds').addEventListener('input', syncHiddenField);
+        tr.querySelector('.ch-scope').addEventListener('input', syncHiddenField);
 
         syncHiddenField();
     }
@@ -485,6 +490,10 @@
         cb.addEventListener('change', syncHiddenField);
     });
     tbody.querySelectorAll('.ch-rate-limit-seconds').forEach(function(input) {
+        input.addEventListener('input', syncHiddenField);
+    });
+
+    tbody.querySelectorAll('.ch-scope').forEach(function(input) {
         input.addEventListener('input', syncHiddenField);
     });
 
