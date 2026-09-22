@@ -6,7 +6,7 @@ import json
 
 from fastapi import APIRouter, Depends, Form, Request
 
-from ...config.schema import AppConfig, ChannelConfig
+from ...config.schema import AppConfig, ChannelConfig, dedupe_channels
 from ...config.writer import save_config
 from ...events.bus import EventBus
 from ...events.types import AppEvent
@@ -135,6 +135,7 @@ async def save_settings(
             ch_cmds = ch.get("enabled_commands", ALL_COMMANDS)
             ch_rate_limit_enabled = bool(ch.get("rate_limit_enabled", True))
             ch_rate_limit_seconds = int(ch.get("rate_limit_seconds", 120))
+            ch_scope = str(ch.get("scope", "") or "").strip()
             if not isinstance(ch_cmds, list):
                 ch_cmds = ALL_COMMANDS
             # Validate command names
@@ -145,11 +146,12 @@ async def save_settings(
                 enabled_commands=ch_cmds,
                 rate_limit_enabled=ch_rate_limit_enabled,
                 rate_limit_seconds=ch_rate_limit_seconds,
+                scope=ch_scope,
             ))
         except (ValueError, TypeError):
             continue
 
-    config.bot.channels = parsed_channels
+    config.bot.channels = dedupe_channels(parsed_channels)
 
     active_channel_ids = {ch.id for ch in config.bot.get_active_channels() if "ping" in ch.enabled_commands}
     selected_guest_ping_channels = sorted({ch for ch in (guest_ping_channels or []) if ch in active_channel_ids})

@@ -66,6 +66,7 @@ Copy `config.example.toml` to `config.toml` and edit to your setup. CLI argument
 
 Key settings:
 - **`[[bot.channels]]`** — define one or more channels with their enabled commands and rate limit settings; if omitted, falls back to `bot.channel`
+- **`scope`** (per `[[bot.channels]]`) and **`bot.flood_scope`** — MeshCore region for bot-originated sends. Precedence: channel `scope`, then `bot.flood_scope`, then unscoped; `"*"` forces unscoped on a channel. Flood scope is device-global, so for each send the bot holds its send lock, sets the scope, verifies the result, sends all chunks, and resets the radio to unscoped afterwards. If scope setup fails nothing is sent; if the send or reset fails the send is reported as failed and the next send retries the reset. When no scope is configured anywhere the radio's scope is never touched. Note: with a scope configured, the radio idles unscoped between sends (other clients sharing the companion radio should not change its scope while the bot runs; only the bot's send path is serialized).
 - **`bot.timezone`** — IANA timezone for daily forecast scheduling (e.g. `"Australia/Melbourne"`); defaults to system local time
 - **`guest_web.ping_channels`** — restrict the guest dashboard to specific channels (empty = all ping-enabled channels)
 

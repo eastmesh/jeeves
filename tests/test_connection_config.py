@@ -167,3 +167,38 @@ async def test_reconnect_tcp_companion_replaces_connection(monkeypatch) -> None:
     assert old_mc.disconnected is True
     assert bot._mc is new_mc
     assert initialized == [new_mc]
+
+
+@pytest.mark.asyncio
+async def test_start_cleans_up_connection_when_initialization_fails(monkeypatch) -> None:
+    config = AppConfig(connection=ConnectionConfig(type="tcp", tcp_host="meshcore.local"))
+    bot = PathBot(config=config, db=DummyDB(), bus=EventBus(), message_store=DummyStore())
+    new_mc = FakeMeshCore()
+    epoch = bot._conn_epoch
+    bot._scope_known_unscoped = True
+
+    async def fake_connect():
+        return new_mc
+
+    async def failing_initialize():
+        raise RuntimeError("init failed")
+
+    monkeypatch.setattr(bot, "_connect", fake_connect)
+    monkeypatch.setattr(bot, "_initialize_connected_meshcore", failing_initialize)
+
+    with pytest.raises(RuntimeError, match="init failed"):
+        await bot.start()
+
+    assert new_mc.stopped_fetching is True
+    assert new_mc.disconnected is True
+    assert bot._mc is None
+    assert bot._scope_known_unscoped is False
+    assert bot._conn_epoch > epoch
+    assert not bot._send_lock.locked()
+
+
+def test_settings_route_dedupes_channels() -> None:
+    from meshcore_pathbot.config.schema import ChannelConfig, dedupe_channels
+
+    out = dedupe_channels([ChannelConfig(id=3, name="a"), ChannelConfig(id=3, name="b")])
+    assert [(c.id, c.name) for c in out] == [(3, "a")]

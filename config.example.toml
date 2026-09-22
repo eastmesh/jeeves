@@ -14,7 +14,7 @@ tcp_reconnect_delay = 5             # Delay between TCP reconnect attempts
 
 [bot]
 node_name = ""                     # Friendly name for this MeshCore node
-flood_scope = ""                 # Optional MeshCore region, e.g. "au-vic"
+flood_scope = ""                 # Optional fallback MeshCore region, e.g. "au-vic"; used by channels without their own scope
 channel = 2                        # Default channel (used when no [[bot.channels]] defined)
 repeaters_file = "repeaters.db"    # Path to repeater SQLite database
 ignore_list = ["jeeves"]           # Node names to ignore (case-insensitive partial match)
@@ -42,6 +42,8 @@ daily_forecast_hour = 6            # Hour to send forecast (Melbourne time, 0-23
 # and default to off — add them explicitly to enable per channel
 # rate_limit_enabled enables per-user command rate limiting on the channel
 # rate_limit_seconds is the per-user cooldown window (default 120 seconds)
+# scope is an optional MeshCore region for bot sends on this channel. Precedence: channel scope,
+# then bot.flood_scope, then unscoped. Use "*" to force unscoped on a channel when bot.flood_scope is set.
 
 [[bot.channels]]
 id = 1
@@ -49,6 +51,7 @@ name = "General"
 enabled_commands = ["trace", "ping", "paths", "prefix"]
 rate_limit_enabled = true
 rate_limit_seconds = 120
+scope = "au-vic"                   # Optional; blank/omitted inherits bot.flood_scope
 
 [[bot.channels]]
 id = 2

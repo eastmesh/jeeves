@@ -224,7 +224,17 @@ class PathBot:
         self._daily_forecast_task: asyncio.Task | None = None
         self._contact_purge_task: asyncio.Task | None = None
         self._tcp_health_task: asyncio.Task | None = None
+        # Serializes every bot-originated radio send AND the device-global
+        # flood scope changes wrapped around it. Other radio commands
+        # (contacts, channel sync, health check) do not take this lock.
         self._send_lock = asyncio.Lock()
+        # True only while the radio is known to be in the unscoped state
+        # (verified reset). Cleared on connect and whenever a scope change or
+        # restore is attempted/fails, so the next send re-establishes it.
+        self._scope_known_unscoped = False
+        # Bumped whenever the underlying link connects/disconnects; a send or
+        # init only records "known unscoped" if the epoch did not change.
+        self._conn_epoch = 0
         self._stopping = False
 
     @property
@@ -236,8 +246,13 @@ class PathBot:
         log.info("Starting PathBot...")
 
         self._stopping = False
-        self._mc = await self._connect()
-        await self._initialize_connected_meshcore()
+        async with self._send_lock:
+            self._mc = await self._connect()
+            try:
+                await self._initialize_connected_meshcore()
+            except BaseException:
+                await self._discard_failed_startup_connection()
+                raise
 
         active_channels = self.config.bot.get_active_channels()
         channel_ids = [ch.id for ch in active_channels]
@@ -276,31 +291,78 @@ class PathBot:
         self._contact_purge_task = None
         self._tcp_health_task = None
 
-        if self._mc:
-            try:
-                await self._mc.stop_auto_message_fetching()
-                await self._mc.disconnect()
-            except Exception as e:
-                log.warning(f"Error during disconnect: {e}")
-            self._mc = None
+        # Wait for any in-flight send (and its scope restore) before tearing
+        # the connection down.
+        async with self._send_lock:
+            mc = self._mc
+            if mc:
+                try:
+                    await mc.stop_auto_message_fetching()
+                    await mc.disconnect()
+                except Exception as e:
+                    log.warning(f"Error during disconnect: {e}")
+                self._mc = None
+                self._invalidate_scope_state()
+        if mc:
             await self.bus.publish(AppEvent.BOT_DISCONNECTED)
             log.info("Disconnected from MeshCore")
 
+    async def _discard_failed_startup_connection(self) -> None:
+        """Tear down a connection whose initial initialization failed.
+
+        Caller must hold ``_send_lock``. Cleanup errors are logged, not raised,
+        so the original startup error propagates.
+        """
+        mc, self._mc = self._mc, None
+        self._invalidate_scope_state()
+        if mc is None:
+            return
+        try:
+            await mc.stop_auto_message_fetching()
+        except Exception as e:
+            log.warning(f"Error stopping auto-fetch after failed startup: {e}")
+        try:
+            await mc.disconnect()
+        except Exception as e:
+            log.warning(f"Error disconnecting after failed startup: {e}")
+
+    def _invalidate_scope_state(self) -> None:
+        """Forget that the radio is known-unscoped (link change or failure)."""
+        self._conn_epoch += 1
+        self._scope_known_unscoped = False
+
+    def _conn_valid(self, mc: Any, epoch: int) -> bool:
+        """True while ``mc`` is still the live connection and no link event occurred."""
+        return self._mc is mc and self._conn_epoch == epoch
+
+    async def _on_connection_state(self, event: Any) -> None:
+        """SDK CONNECTED/DISCONNECTED (serial/BLE auto-reconnect): re-verify scope."""
+        self._invalidate_scope_state()
+
     async def _initialize_connected_meshcore(self) -> None:
-        """Sync state and subscribe handlers for the current MeshCore connection."""
+        """Sync state and subscribe handlers for the current MeshCore connection.
+
+        Callers must hold ``_send_lock`` so no send can use the connection
+        before initialization completes.
+        """
         if self._mc is None:
             raise ConnectionError("MeshCore connection not available")
 
+        # One subscription per connection object (each connect creates a new one).
+        self._mc.subscribe(EventType.CONNECTED, self._on_connection_state)
+        self._mc.subscribe(EventType.DISCONNECTED, self._on_connection_state)
+
         await self.bus.publish(AppEvent.BOT_CONNECTED)
         await self._sync_contacts()
-        await self._configure_flood_scope()
+        self._invalidate_scope_state()
+        await self._initialize_scope_state(self._mc)
 
         active_channels = self.config.bot.get_active_channels()
         await self._sync_channel_hashes(active_channels)
 
         self._mc.subscribe(EventType.ADVERTISEMENT, self._on_advert)
         self._mc.subscribe(EventType.RX_LOG_DATA, self._on_rx_log_data)
-        for ch in active_channels:
+        for ch in {c.id: c for c in active_channels}.values():
             self._mc.subscribe(
                 EventType.CHANNEL_MSG_RECV,
                 self._on_channel_msg,
@@ -309,21 +371,71 @@ class PathBot:
 
         await self._mc.start_auto_message_fetching()
 
-    async def _configure_flood_scope(self) -> None:
-        """Apply the configured region scope to bot-originated messages."""
-        scope = self.config.bot.flood_scope.strip()
-        if not scope:
-            return
-        if self._mc is None:
-            raise ConnectionError("MeshCore connection not available")
-        setter = getattr(self._mc.commands, "set_flood_scope", None)
+    @staticmethod
+    def _result_ok(result: Any, expected: tuple[Any, ...]) -> bool:
+        """Fail-closed check of a MeshCore result envelope.
+
+        Rejects None, envelopes without a ``type``, ERROR and any type outside
+        ``expected`` (the SDK's success events for that command: OK for
+        set_flood_scope, MSG_SENT for send_chan_msg, SELF_INFO for appstart).
+        Compatibility decision: ``type is None`` is accepted as success because
+        the repository's test fakes use ``SimpleNamespace(type=None)`` for
+        success; the real SDK never produces a None type.
+        """
+        if result is None or not hasattr(result, "type"):
+            return False
+        return result.type is None or result.type in expected
+
+    @classmethod
+    def _check_result(
+        cls, result: Any, action: str, expected: tuple[Any, ...] = (EventType.OK,)
+    ) -> None:
+        """Raise ConnectionError if a MeshCore result is missing, an error or unexpected."""
+        if not cls._result_ok(result, expected):
+            if result is None:
+                detail = "no response"
+            elif not hasattr(result, "type"):
+                detail = "malformed result (no type)"
+            elif result.type == EventType.ERROR:
+                detail = getattr(result, "payload", None)
+            else:
+                detail = f"unexpected result type {result.type!r}"
+            raise ConnectionError(f"{action} failed: {detail}")
+
+    async def _apply_scope(self, mc: MeshCore, scope: str) -> None:
+        """Set (or, for ``""``, reset to unscoped) the radio's flood scope on ``mc``.
+
+        Raises on missing SDK support, exceptions, None or ERROR results.
+        """
+        setter = getattr(mc.commands, "set_flood_scope", None)
         if setter is None:
             raise RuntimeError("Installed MeshCore library does not support flood scopes")
-        result = await setter(scope)
-        if result is None or getattr(result, "type", None) == EventType.ERROR:
-            payload = getattr(result, "payload", None)
-            raise ConnectionError(f"Failed to set MeshCore flood scope {scope!r}: {payload}")
-        log.info("MeshCore flood scope set to %s", scope)
+        if scope:
+            result = await setter(scope)
+        else:
+            # SDKs that support reset take None; older ones may reject it, so
+            # fall back to the raw all-zero key meaning "no scope".
+            try:
+                result = await setter(None)
+            except (TypeError, AttributeError):
+                result = await setter(b"\0" * 16)
+        self._check_result(result, f"Setting MeshCore flood scope {scope or '<unscoped>'!r}")
+
+    async def _initialize_scope_state(self, mc: MeshCore) -> None:
+        """Put a freshly connected radio into a known (unscoped) state.
+
+        Only acts when a scope is configured somewhere; otherwise the radio's
+        scope is left untouched (legacy behaviour). Failure aborts
+        initialization so the reconnect loop retries. Callers hold
+        ``_send_lock`` (it is not re-acquired here).
+        """
+        if not self.config.bot.scope_management_enabled():
+            return
+        epoch = self._conn_epoch
+        await self._apply_scope(mc, "")
+        if epoch == self._conn_epoch:
+            self._scope_known_unscoped = True
+        log.info("MeshCore flood scope reset to unscoped; scopes applied per send")
 
     @staticmethod
     def _transport_code_for_scope(scope: str) -> str:
@@ -335,14 +447,15 @@ class PathBot:
 
     async def _tcp_health_check(self) -> bool:
         """Return whether the TCP companion responds to a lightweight command."""
-        if self._mc is None or not getattr(self._mc, "is_connected", False):
+        mc = self._mc  # local ref: reconnect may replace self._mc mid-await
+        if mc is None or not getattr(mc, "is_connected", False):
             return False
         try:
-            result = await self._mc.commands.send_appstart()
+            result = await mc.commands.send_appstart()
         except Exception as exc:
             log.warning("TCP companion health check failed: %s", exc)
             return False
-        return result is not None and getattr(result, "type", None) != EventType.ERROR
+        return self._result_ok(result, (EventType.SELF_INFO,))
 
     async def _tcp_health_loop(self) -> None:
         """Watch TCP companion health and reconnect when the link goes stale."""
@@ -365,25 +478,41 @@ class PathBot:
         delay = max(1, conn.tcp_reconnect_delay)
         log.warning("TCP companion unhealthy; reconnecting")
 
-        old_mc = self._mc
-        self._mc = None
-        await self.bus.publish(AppEvent.BOT_DISCONNECTED)
-        if old_mc is not None:
-            with contextlib.suppress(Exception):
-                await old_mc.stop_auto_message_fetching()
-            with contextlib.suppress(Exception):
-                await old_mc.disconnect()
-
+        torn_down = False
         for attempt in range(1, attempts + 1):
             if self._stopping:
                 return
+            new_mc: MeshCore | None = None
             try:
-                self._mc = await self._connect()
-                await self._initialize_connected_meshcore()
+                # Sends queue behind the lock until initialization is complete.
+                async with self._send_lock:
+                    if not torn_down:
+                        # Wait for in-flight sends, then drop the old link in
+                        # the same critical section that installs the new one.
+                        old_mc, self._mc = self._mc, None
+                        self._invalidate_scope_state()
+                        if old_mc is not None:
+                            with contextlib.suppress(Exception):
+                                await old_mc.stop_auto_message_fetching()
+                            with contextlib.suppress(Exception):
+                                await old_mc.disconnect()
+                        torn_down = True
+                        await self.bus.publish(AppEvent.BOT_DISCONNECTED)
+                    try:
+                        new_mc = await self._connect()
+                        self._mc = new_mc
+                        await self._initialize_connected_meshcore()
+                    except BaseException:
+                        self._mc = None
+                        self._invalidate_scope_state()
+                        # Don't leak a half-initialized connection.
+                        if new_mc is not None:
+                            with contextlib.suppress(Exception):
+                                await new_mc.disconnect()
+                        raise
                 log.info("TCP companion reconnected on attempt %s/%s", attempt, attempts)
                 return
             except Exception as exc:
-                self._mc = None
                 log.warning(
                     "TCP reconnect attempt %s/%s failed: %s", attempt, attempts, exc
                 )
@@ -672,25 +801,107 @@ class PathBot:
     async def send_channel_message(self, channel_id: int, text: str) -> bool:
         """Send a text message on the given channel, serialized via a global lock.
 
+        Flood scope is device-global, so while holding the lock this sets the
+        channel's scope (see BotConfig.resolve_scope), verifies it, sends all
+        chunks, then restores the radio to unscoped in a ``finally``. Nothing
+        is sent if scope setup fails. Returns True only if setup, every chunk
+        and the restore succeeded.
+
         A 2-second gap is enforced after the last chunk so concurrent callers
-        can never fire messages back-to-back.  Returns True on success.
+        can never fire messages back-to-back.
         """
         if not self._mc:
             log.warning("Cannot send message: not connected to MeshCore")
             return False
+        manage_scope = self.config.bot.scope_management_enabled()
+        scope = self.config.bot.resolve_scope(channel_id)
         async with self._send_lock:
-            chunks = self._split_message(text)
-            for i, chunk in enumerate(chunks):
-                if i > 0:
-                    await asyncio.sleep(2)
-                result = await self._mc.commands.send_chan_msg(channel_id, chunk)
-                if result.type == EventType.ERROR:
-                    log.error(f"Failed to send message on ch{channel_id}: {result.payload}")
-                    self.stats.errors += 1
-                    return False
-                self.stats.messages_out += 1
-            await asyncio.sleep(2)  # gap before next message can acquire the lock
-        return True
+            # Re-read after waiting: a reconnect may have swapped or dropped it.
+            mc = self._mc
+            if mc is None:
+                log.warning("Cannot send message: connection lost while waiting to send")
+                return False
+
+            ok = True
+            scope_touched = False
+            finished = False
+            epoch = self._conn_epoch
+            try:
+                if manage_scope and (scope or not self._scope_known_unscoped):
+                    scope_touched = True
+                    self._scope_known_unscoped = False
+                    try:
+                        await self._apply_scope(mc, scope)
+                    except Exception as exc:
+                        log.error(f"Scope setup failed for ch{channel_id}; not sending: {exc}")
+                        self.stats.errors += 1
+                        return False
+                    if not scope:
+                        if self._conn_valid(mc, epoch):
+                            self._scope_known_unscoped = True
+                        scope_touched = False
+
+                chunks = self._split_message(text)
+                for i, chunk in enumerate(chunks):
+                    if i > 0:
+                        await asyncio.sleep(2)
+                    # A connection event (checked before every chunk, never
+                    # awaiting the lock) means scope state is unknown: stop.
+                    if not self._conn_valid(mc, epoch):
+                        log.error(f"Connection changed during ch{channel_id} send; aborting")
+                        self.stats.errors += 1
+                        ok = False
+                        break
+                    try:
+                        result = await mc.commands.send_chan_msg(channel_id, chunk)
+                    except Exception as exc:
+                        log.error(f"Failed to send message on ch{channel_id}: {exc}")
+                        self.stats.errors += 1
+                        ok = False
+                        break
+                    if not self._result_ok(result, (EventType.MSG_SENT, EventType.OK)):
+                        payload = getattr(result, "payload", None)
+                        log.error(
+                            f"Failed to send message on ch{channel_id}: "
+                            f"{payload if payload is not None else result!r}"
+                        )
+                        self.stats.errors += 1
+                        ok = False
+                        break
+                    self.stats.messages_out += 1
+                    if not self._conn_valid(mc, epoch):
+                        # Connection event arrived while the command was in
+                        # flight: no further chunks.
+                        log.error(f"Connection changed during ch{channel_id} send; aborting")
+                        self.stats.errors += 1
+                        ok = False
+                        break
+                finished = ok
+            finally:
+                if manage_scope and not finished:
+                    # Failed/aborted send: radio state is unknown, even when
+                    # this send skipped scope setup. Restore below re-verifies.
+                    self._scope_known_unscoped = False
+                if scope_touched and not self._conn_valid(mc, epoch):
+                    # Stale connection: never restore through it. Scope state
+                    # was already invalidated, so the next send re-applies it.
+                    self._scope_known_unscoped = False
+                elif scope_touched:
+                    try:
+                        await self._apply_scope(mc, "")
+                        if self._conn_valid(mc, epoch):
+                            self._scope_known_unscoped = True
+                    except Exception as exc:
+                        # Radio may still be scoped; the next send (or
+                        # reconnect) will retry the reset before sending.
+                        log.error(
+                            f"Failed to restore unscoped state after ch{channel_id} send: {exc}"
+                        )
+                        self.stats.errors += 1
+                        ok = False
+            if ok:
+                await asyncio.sleep(2)  # gap before next message can acquire the lock
+            return ok
 
     async def _daily_forecast_loop(self) -> None:
         """Send a daily 3-day forecast broadcast at the configured hour (local time)."""
@@ -881,7 +1092,7 @@ class PathBot:
 
         # Inbound messages are accepted regardless of whether the companion
         # provides a correlated transport code. The configured flood scope is
-        # applied to bot-originated replies by _configure_flood_scope(); an
+        # applied to bot-originated replies per send by send_channel_message(); an
         # inbound transport-code filter would discard valid/un-correlated
         # channel events before command handling.
 

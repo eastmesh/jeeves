@@ -27,6 +27,11 @@ class DummyStore:
 class DummyCommands:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str]] = []
+        self.scopes: list[object] = []
+
+    async def set_flood_scope(self, scope):
+        self.scopes.append(scope)
+        return SimpleNamespace(type=None, payload={})
 
     async def send_chan_msg(self, channel_id: int, text: str):
         self.sent.append((channel_id, text))
